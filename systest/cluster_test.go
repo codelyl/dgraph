@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"io/ioutil"
 	"net/http"
@@ -12,7 +13,43 @@ import (
 	"syscall"
 	"testing"
 	"time"
+
+	"github.com/dgraph-io/dgraph/x"
+	"github.com/stretchr/testify/require"
 )
+
+type Member struct {
+	Id      string `json:"id"`
+	GroupId int    `json:"groupId"`
+	Leader  bool   `json:"leader"`
+}
+
+type GroupState struct {
+	Members map[string]Member `json:"members"`
+}
+
+type State struct {
+	Groups map[string]GroupState `json:"groups"`
+}
+
+func waitForConvergence(t *testing.T, c *DgraphCluster) {
+	for i := 0; i < 60; i++ {
+		resp, err := http.Get(fmt.Sprintf("http://localhost:%d/state", c.zeroPortOffset+6080))
+		require.NoError(t, err)
+		b, err := ioutil.ReadAll(resp.Body)
+		require.NoError(t, err)
+
+		var s State
+		require.NoError(t, json.Unmarshal(b, &s))
+		members := s.Groups["1"].Members
+		if len(members) == 2 && (members["1"].Leader || members["2"].Leader) {
+			break
+		}
+
+		x.Println("Couldn't find leader, waiting...")
+		time.Sleep(time.Second)
+	}
+}
 
 func TestClusterSnapshot(t *testing.T) {
 	if testing.Short() {
@@ -27,7 +64,7 @@ func TestClusterSnapshot(t *testing.T) {
 	defer cluster.Close()
 
 	schema := os.ExpandEnv("$GOPATH/src/github.com/dgraph-io/dgraph/systest/data/goldendata.schema")
-	data := os.ExpandEnv("$GOPATH/src/github.com/dgraph-io/dgraph/systest/data/goldendata.rdf.gz")
+	data := os.ExpandEnv("$GOPATH/src/github.com/dgraph-io/dgraph/systest/data/goldendata_200k.rdf.gz")
 
 	liveCmd := exec.Command(os.ExpandEnv("$GOPATH/bin/dgraph"), "live",
 		"--rdfs", data,
@@ -58,14 +95,14 @@ func TestClusterSnapshot(t *testing.T) {
 		t.Fatalf("Couldn't add server: %v\n", err)
 	}
 
-	// TODO - Make this more deterministic.
-	dur := 90 * time.Second
-	// TODO - Remove later when we move nightly to Teamcity
-	if ok := os.Getenv("TRAVIS"); ok == "true" {
-		dur = 2 * dur
+	quickCheck := func(err error) {
+		if err != nil {
+			shutdownCluster()
+			t.Fatalf("Got error: %v\n", err)
+		}
 	}
-	// Approx time for snapshot to be transferred to the second instance.
-	time.Sleep(dur)
+
+	waitForConvergence(t, cluster)
 
 	cluster.dgraph.Process.Signal(syscall.SIGINT)
 	if _, err = cluster.dgraph.Process.Wait(); err != nil {
@@ -80,19 +117,7 @@ func TestClusterSnapshot(t *testing.T) {
 		t.Fatalf("Couldn't start Dgraph server again: %v\n", err)
 	}
 
-	dur = 15 * time.Second
-	if ok := os.Getenv("TRAVIS"); ok == "true" {
-		dur = 2 * dur
-	}
-	// Wait for leader election to happen again.
-	time.Sleep(dur)
-
-	quickCheck := func(err error) {
-		if err != nil {
-			shutdownCluster()
-			t.Fatalf("Got error: %v\n", err)
-		}
-	}
+	waitForConvergence(t, cluster)
 
 	// Now try and export data from second server.
 	o, err := strconv.Atoi(n.offset)
@@ -113,7 +138,7 @@ func TestClusterSnapshot(t *testing.T) {
 	out, err := exec.Command("sh", "-c", cmd).Output()
 	quickCheck(err)
 	count := strings.TrimSpace(string(out))
-	if count != "1120879" {
+	if count != "200000" {
 		shutdownCluster()
 		t.Fatalf("Export count mismatch. Got: %s", count)
 	}

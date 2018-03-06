@@ -176,6 +176,8 @@ func TestClusterSnapshot(t *testing.T) {
 	}
 	waitForNodeToBeHealthy(t, cluster.dgraphPortOffset+x.PortHTTP)
 	waitForConvergence(t, cluster)
+	// TODO(pawan) - Investigate why the test fails if we remove this export.
+	// The second export has less RDFs than it should if we don't do this export.
 	err = matchExportCount(matchExport{
 		expectedRDF:    2e5,
 		expectedSchema: 10,
@@ -189,7 +191,6 @@ func TestClusterSnapshot(t *testing.T) {
 
 	// Start another Dgraph node.
 	var dgraphDir = filepath.Join(tmpDir, "dgraph_2")
-	fmt.Println("dir", dgraphDir)
 	n, err := cluster.AddNode(dgraphDir)
 
 	shutdownCluster := func() {
@@ -220,6 +221,8 @@ func TestClusterSnapshot(t *testing.T) {
 		shutdownCluster()
 		log.Fatal(err)
 	}
+	// A better method would be to have a transfer leadership method.
+	time.Sleep(5 * time.Second)
 
 	waitForNodeToBeHealthy(t, cluster.dgraphPortOffset+x.PortHTTP)
 	waitForNodeToBeHealthy(t, o+x.PortHTTP)

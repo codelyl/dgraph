@@ -137,13 +137,14 @@ func handleError(err error) {
 }
 
 func (l *loader) infinitelyRetry(req api.Mutation) {
-	defer l.retryRequestsWg.Done()
+	defer l.requestsWg.Done()
 	for {
 		txn := l.dc.NewTxn()
 		req.CommitNow = true
 		req.IgnoreIndexConflict = opt.ignoreIndexConflict
 		_, err := txn.Mutate(l.opts.Ctx, &req)
 		if err == nil {
+			atomic.AddUint64(&l.rdfs, uint64(len(req.Set)))
 			atomic.AddUint64(&l.txns, 1)
 			return
 		}
@@ -160,12 +161,13 @@ func (l *loader) request(req api.Mutation) {
 	_, err := txn.Mutate(l.opts.Ctx, &req)
 
 	if err == nil {
+		atomic.AddUint64(&l.rdfs, uint64(len(req.Set)))
 		atomic.AddUint64(&l.txns, 1)
 		return
 	}
 	handleError(err)
 	atomic.AddUint64(&l.aborts, 1)
-	l.retryRequestsWg.Add(1)
+	l.requestsWg.Add(1)
 	go l.infinitelyRetry(req)
 }
 

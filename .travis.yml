@@ -38,4 +38,7 @@ script:
   bash contrib/scripts/load-test.sh $HOME/build || travis_terminate 1;
   contrib/tlstest/run.sh;
   contrib/nightly/upload.sh;
+  else
+  cd systest
+  go test -v -run=ClusterSnapshot .
   fi

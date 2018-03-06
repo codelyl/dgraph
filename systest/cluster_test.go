@@ -170,24 +170,24 @@ func TestClusterSnapshot(t *testing.T) {
 	}
 
 	// So that snapshot happens and everything is persisted to disk.
-	//	if err := restart(cluster.dgraph); err != nil {
-	//		//		shutdownCluster()
-	//		log.Fatal(err)
-	//	}
-	//	waitForNodeToBeHealthy(t, cluster.dgraphPortOffset+x.PortHTTP)
-	//	waitForConvergence(t, cluster)
-	//	// TODO(pawan) - Investigate why the test fails if we remove this export.
-	//	// The second export has less RDFs than it should if we don't do this export.
-	//	err = matchExportCount(matchExport{
-	//		expectedRDF:    2e5,
-	//		expectedSchema: 10,
-	//		dir:            cluster.dir,
-	//		port:           cluster.dgraphPortOffset + x.PortHTTP,
-	//	})
-	//	if err != nil {
-	//		//		shutdownCluster()
-	//		t.Fatal(err)
-	//	}
+	if err := restart(cluster.dgraph); err != nil {
+		//		shutdownCluster()
+		log.Fatal(err)
+	}
+	waitForNodeToBeHealthy(t, cluster.dgraphPortOffset+x.PortHTTP)
+	waitForConvergence(t, cluster)
+	// TODO(pawan) - Investigate why the test fails if we remove this export.
+	// The second export has less RDFs than it should if we don't do this export.
+	err = matchExportCount(matchExport{
+		expectedRDF:    2e5,
+		expectedSchema: 10,
+		dir:            cluster.dir,
+		port:           cluster.dgraphPortOffset + x.PortHTTP,
+	})
+	if err != nil {
+		//		shutdownCluster()
+		t.Fatal(err)
+	}
 
 	// Start another Dgraph node.
 	var dgraphDir = filepath.Join(tmpDir, "dgraph_2")

@@ -39,6 +39,6 @@ script:
   contrib/tlstest/run.sh;
   contrib/nightly/upload.sh;
   else
-  cd systest
-  go test -v -run=ClusterSnapshot .
+    cd systest;
+    go test -v -run=ClusterSnapshot .;
   fi
